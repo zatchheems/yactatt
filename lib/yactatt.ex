@@ -1,17 +1,13 @@
 defmodule Yactatt do
   @moduledoc """
   Yet Another CTA Transit Tracker.
-  
-  The main goal is to eventually drive an LED matrix and prettily display exactly how fucking late
-  I'll be to literally everything in Chicago all the goddamned time. And I'll want to see whether
-  buses and trains will actually show up or just vaporize into thin air-- that is,
-  I'd like to see a visual distinction between scheduled buses and physically present ones.
 
-  This is a fun project made purely out of spite and a desire to do something fun
-  with Nerves and Raspberry Pi, but this simple library is enough just to show bus times and
-  locations, along with some other information like whether it's delayed.
+  Get buses and trains by route number/color.
 
-  Be kind to your drivers. They do not get paid enough to deal with this shit.
+  TODO: trains.
+
+  TODO: proximity-based bus tracking, wherein if the heading is pointing towards
+  the device's location and approaching, the associated buses and trains will be retrieved.
   """
 
   @cta_endpoint "http://www.ctabustracker.com"
