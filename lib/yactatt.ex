@@ -7,23 +7,35 @@ defmodule Yactatt do
 
   TODO: proximity-based bus tracking, wherein if the heading is pointing towards
   the device's location and approaching, the associated buses and trains will be retrieved.
+  There is also a possibility of writing a config file and reading from that as a sort of "calibration"
+  step. I may want to do this in the Nerves project instead of this library as a separation of concerns.
+
+  TODO: reconcile predictions with actual GPS locations for buses.
   """
 
   @bustracker_endpoint "http://www.ctabustracker.com"
-  @bustracker_path "/bustime/api/v2/getvehicles"
+  @bustracker_vehicles_path "/bustime/api/v2/getvehicles"
+  @bustracker_predictions_path "/bustime/api/v2/getpredictions"
 
   @traintracker_endpoint "http://lapi.transitchicago.com"
   @traintracker_path "/api/1.0/ttarrivals.aspx"
 
   require Logger
-  
+
+  @spec is_non_neg_integer(any) ::
+          {:__block__ | {:., [], [:andalso | :erlang, ...]}, [],
+           [{:= | {any, any, any}, [], [...]}, ...]}
   defguard is_non_neg_integer(int) when is_integer(int) and int > 0
 
   # NOTE: uses builtin Erlang httpc library, which doesn't validate SSL certs.
   # The API doesn't use HTTPS, so this is fine for now, if a bit quick and dirty.
-  defp bus_api_request(args) do
-    key = Application.get_env(:yactatt, :cta_bustracker_key)
-    url = @bustracker_endpoint <> @bustracker_path <> "?format=json&key=" <> key <> args
+  defp bus_api_request(args, type \\ :vehicles) do
+    key = Application.fetch_env!(:yactatt, :cta_bustracker_key)
+    path = case type do
+      :vehicles -> @bustracker_vehicles_path
+      :predictions -> @bustracker_predictions_path
+    end
+    url = @bustracker_endpoint <> path <> "?format=json&key=" <> key <> args
     Logger.debug url
     with {:ok, {_http_response, _headers, response}} <- :httpc.request(url),
          {:ok, %{"bustime-response" => %{"vehicle" => bustimes}}} <- Jason.decode(response) do
@@ -36,6 +48,7 @@ defmodule Yactatt do
     end
   end
 
+  @spec get_buses!([{:routes, [non_neg_integer] | pos_integer}, ...]) :: list
   @doc """
   Get buses based on the routes provided.
   Bear in mind the CTA API only allows for 10 routes to be specified at once.
@@ -87,7 +100,12 @@ defmodule Yactatt do
   TODO: allow more specfic requests using keyword lists, e.g. routes: [1,2,3], stops: [4321,4231]
   """
   @spec get_buses(routes: non_neg_integer | [non_neg_integer]) :: {atom, [Vehicle.t()] | String.t()}
-  def get_buses(routes: route) when not is_list(route) and is_non_neg_integer(route), do: route |> List.wrap() |> get_buses()
+  def get_buses!(args) do
+    {:ok, buses} = get_buses(args)
+    buses
+  end
+  def get_buses(route) when not is_list(route) and is_non_neg_integer(route), do: get_buses(routes: List.wrap(route))
+  def get_buses(routes: route) when not is_list(route) and is_non_neg_integer(route), do: get_buses(routes: List.wrap(route))
   def get_buses(routes: routes) when is_list(routes) and length(routes) > 0 and length(routes) <= 10 do
     valid_routes = Enum.filter(routes, &(is_non_neg_integer(&1)))
     if length(valid_routes) == 0, do: raise ArgumentError, message: ~s(No valid bus routes given.\n\n  Bus routes are individuals or lists of non negative integers, \n  ex: 146, [1,2,3,4], etc.\n)
@@ -96,15 +114,15 @@ defmodule Yactatt do
 
     bus_api_request("&rt=" <> routes_str)
   end
-  def get_buses(stops: stops, routes: routes) when is_list(stops) and is_list(routes) and length(stops) > 0 and length(stops) <= 10 and length(routes) > 0 and length(routes) <= 10 do
-    valid_routes = Enum.filter(routes, &(is_non_neg_integer(&1)))
-    valid_stops = Enum.filter(stops, &(is_non_neg_integer(&1)))
-    if length(valid_routes) == 0 or length(valid_stops) == 0, do: raise ArgumentError, message: ~s(No valid bus stops given or no valid routes specified.\n\n  Bus stops are individuals or lists of non negative integers, \n  ex: 8825, [15203,11003], etc.\n  Bus routes are individuals or lists of non negative integers, \n  ex: 146, [1,2,3,4], etc.\n)
 
-    routes_str = Enum.map_join(valid_routes,",", &(Integer.to_string(&1)))
+  @spec get_bus_predictions([{:routes, list} | {:stops, list}, ...]) :: {:error, any} | {:ok, list}
+  def get_bus_predictions(stops: stops) when is_list(stops) and length(stops) > 0 and length(stops) <= 10 do
+    valid_stops = Enum.filter(stops, &(is_non_neg_integer(&1)))
+    if length(valid_stops) == 0, do: raise ArgumentError, message: ~s(No valid bus stops given.\n\n  Bus stops are individuals or lists of non negative integers, \n  ex: 8825, [15203,11003], etc.\n)
+
     stops_str = Enum.map_join(valid_stops,",", &(Integer.to_string(&1)))
 
-    bus_api_request("&stpid=" <> stops_str <> "&rt=" <> routes_str)
+    bus_api_request("&stpid=" <> stops_str, :predictions)
   end
 
   @doc """
@@ -154,6 +172,7 @@ defmodule CTABus do
     timestamp_str
   end
 
+  @spec map_response_to_struct(map) :: struct
   def map_response_to_struct(vehicle) when is_map(vehicle) do
     %{
       "des" => destination,
@@ -240,7 +259,7 @@ defmodule CTATrain do
       "stpId" => stop_id,
       "trDr" => train_direction
     } = vehicle
-    
+
     struct(__MODULE__,
       arrival_time: timestamp_str_to_datetime(arrival_time),
       destination_name: destination_name,
