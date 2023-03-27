@@ -24,3 +24,8 @@ yactatt-*.tar
 
 # Temporary files, for example, from tests.
 /tmp/
+
+
+# Added by cargo
+
+/target
