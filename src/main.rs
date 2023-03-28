@@ -1,13 +1,9 @@
 // FIXME: messy consts. Bundle paths and queries together somehow
-const BUSTRACKER_ENDPOINT: &str = "http://www.ctabustracker.com";
-const BUSTRACKER_PATH: &str = "/bustime/api/v2/getvehicles";
+const BUSTRACKER: (&str, &str, &str) =
+    ("http://www.ctabustracker.com", "/bustime/api/v2/getvehicles", "format=json&key=<KEY>&rt=50&spid=1802");
 
-const TRAINTRACKER_ENDPOINT: &str = "http://lapi.transitchicago.com";
-const TRAINTRACKER_PATH: &str = "/api/1.0/ttarrivals.aspx";
-
-// TODO: this should probably be a hash map(???)
-const BUSTRACKER_QUERY: &str = "format=json&key=<KEY>&rt=50&spid=1802";
-const TRAINTRACKER_QUERY: &str = "outputType=JSON&key=<KEY>&mapid=40380";
+const TRAINTRACKER: (&str, &str, &str) =
+    ("http://lapi.transitchicago.com", "/api/1.0/ttarrivals.aspx", "outputType=JSON&key=<KEY>&mapid=40380");
 
 // use serde::{Serialize, Deserialize, Debug};
 use reqwest;
@@ -44,11 +40,12 @@ async fn main() {
     println!("Starting YACTATT...");
     let client = reqwest::Client::new();
     // TODO: build structs to parse bus/train responses
-    cta_api_request(&client, BUSTRACKER_ENDPOINT, BUSTRACKER_PATH, BUSTRACKER_QUERY).await;
-    cta_api_request(&client, TRAINTRACKER_ENDPOINT, TRAINTRACKER_PATH, TRAINTRACKER_QUERY).await;
+    cta_api_request(&client, BUSTRACKER).await;
+    cta_api_request(&client, TRAINTRACKER).await;
 }
 
-async fn cta_api_request(client: &reqwest::Client, endpoint: &str, path: &str, query: &str) {
+async fn cta_api_request(client: &reqwest::Client, api: (&str, &str, &str)) {
+    let (endpoint, path, query) = api;
     let response =
         client.get(format!("{}{}?{}", endpoint, path, query))
         .send()
