@@ -9,9 +9,34 @@ const TRAINTRACKER_PATH: &str = "/api/1.0/ttarrivals.aspx";
 const BUSTRACKER_QUERY: &str = "format=json&key=<KEY>&rt=50&spid=1802";
 const TRAINTRACKER_QUERY: &str = "outputType=JSON&key=<KEY>&mapid=40380";
 
+// use serde::{Serialize, Deserialize, Debug};
 use reqwest;
+use chrono::NaiveDate;
 // use reqwest::header::Authorization;
 // use reqwest::header::ContentType;
+// #[derive(Serialize, Deserialize, Debug)]
+struct CTABus {
+  heading: i16,
+  vehicle_id: String,
+  timestamp: NaiveDate,
+  latitude: f32,
+  longitude: f32,
+  route: String,
+  delayed: bool,
+  destination: String,
+  pattern_distance: i32,
+  pattern_id: i32,
+}
+
+struct CTATrain {
+  heading: i16,
+  vehicle_id: String,
+  timestamp: String,
+  latitude: f32,
+  longitude: f32,
+  route: String,
+  delayed: bool
+}
 
 #[tokio::main]
 async fn main() {
@@ -29,6 +54,7 @@ async fn cta_api_request(client: &reqwest::Client, endpoint: &str, path: &str, q
         .send()
         .await;
 
+    // TODO: map buses/trains to vector of structs
     match response {
         Ok(result) => println!("{:?}", result
         .text()
