@@ -1,23 +1,39 @@
-# Yactatt — Yet Another CTA Transit Tracker
+# Yactatt — Yet Another (Unofficial!) CTA Transit Tracker
 
-The main goal is to eventually drive an LED matrix and prettily display exactly
-how late I'll be to literally everything in Chicago all the goddamned time.
-And I'll want to see whether buses and trains will actually show up or just vaporize
-into thin air—that is, I'd like to see a visual distinction between scheduled buses
-and physically present ones.
+Basic Rust project making use of [Chicago Transit Authority data](https://www.transitchicago.com/developers/)
+to display bus and train times on an LED matrix.
 
-This is a fun project made out of a mixture of love and spite plus a desire to do
-something fun with Nerves and Raspberry Pi, but this simple library is enough just
-to show bus times and locations, along with some other information like whether
-it's delayed.
+Powered by [rpi-rgb-led-matrix](https://github.com/hzeller/rpi-rgb-led-matrix),
+by way of [rpi-led-panel](https://github.com/EmbersArc/rpi_led_panel).
 
-Be kind to your drivers and conductors.
-They do not get paid enough to deal with everything they do.
+Remember to be kind to your drivers and conductors: they deserve better benefits.
 
-## Installation
+## TODOs
 
-_TODO. We're getting there. Slowly._
+- [ ] Poll CTA API for data
+- [ ] Write out to LED panel, showing:
+  - Route
+  - Heading
+  - Wait time
+  - Delayed?
+  - Run ID (optional)
+  - Cool animations (optional)
+- [ ] Runtime args for the following:
+  - LED matrix rows
+  - LED matrix columns
+  - Bus routes
+  - Train routes
+  - Bus stops
+  - Train stations
+  - Refresh rate
+- [ ] Config file in TOML, supplementing/overridden by the above
 
-## Licence
+## Background
 
-_TODO._
+I'm an Elixir/ReScript developer by day and I don't really know Rust!
+
+This started out as a way to leverage Nerves to try to get down to the hardware level bit as time
+goes by I am skeptical of doing _that_ much work when perfectly good LED panel libraries exist and
+support languages such as Rust, which is one I've been itching to learn for a while.
+
+Pardon my dust.
