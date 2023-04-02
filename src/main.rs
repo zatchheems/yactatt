@@ -1,14 +1,34 @@
-use std::{time, thread};
-use reqwest::{self, StatusCode};
+use std::{time, thread, collections::HashMap};
 use chrono::NaiveDateTime;
+use clap::{Arg, arg, Command, ArgMatches};
+use reqwest::{self, StatusCode, Url};
+use rpi_led_panel::{RGBMatrix, RGBMatrixConfig, Canvas};
 use serde::{Serialize, Deserialize};
 
-// FIXME: messy consts. Bundle paths and queries together somehow
-const BUSTRACKER: (&str, &str, &str) =
-    ("http://www.ctabustracker.com", "/bustime/api/v2/getvehicles", "format=json&key=<KEY>&rt=50&spid=1802");
+struct URL {
+    protocol: String,
+    domain: String,
+    path: String,
+    query: String
+}
 
-const TRAINTRACKER: (&str, &str, &str) =
-    ("http://lapi.transitchicago.com", "/api/1.0/ttarrivals.aspx", "outputType=JSON&key=<KEY>&mapid=40380");
+const BUSTRACKER_URL: &str =
+    "http://www.ctabustracker.com/bustime/api/v2/getvehiclesformat=json&key=<KEY>&rt=50&spid=1802";
+
+const TRAINTRACKER_URL: &str =
+    "http://lapi.transitchicago.com/api/1.0/totarrivals.aspxoutputType=JSON&key=<KEY>&mapid=40380";
+
+// static CTA_COLORS: HashMap<&str, i32> = HashMap::from([
+//     ("red", 0xc60c30),
+//     ("blue", 0x00a1de),
+//     ("brown", 0x62361b),
+//     ("green", 0x009b3a),
+//     ("orange", 0xf9461c),
+//     ("purple", 0x522398),
+//     ("pink", 0xe27ea6),
+//     ("yellow", 0xf9e300),
+//     ("sign_grey", 0x565a5c),
+// ]);
 
 // use reqwest::header::Authorization;
 // use reqwest::header::ContentType;
@@ -40,12 +60,28 @@ struct CTATrain {
 
 #[tokio::main]
 async fn main() {
+    let arguments = Command::new("YACTATT")
+        .version("0.1.0") // TODO: use version in Cargo.toml
+        .author("Zak Hammerman <@zatchheems>")
+        .about("Yet Another CTA Transit Tracker")
+        .args([
+            arg!(-r --rows <i8> "LED matrix rows"),
+            arg!(-c --cols <i8> "LED matrix columns"),
+        ])
+        .get_matches();
+
+
+    let rows: i8 = *arguments.get_one::<i8>("rows").unwrap_or(&16);
+    let cols: i8 = *arguments.get_one::<i8>("cols").unwrap_or(&64);
+
     // Set up LED panel framework
     println!("Starting YACTATT...");
+
+    splash_screen(rows, cols);
     
     let client = reqwest::Client::new();
     
-    // TODO: how tf do I use argv?
+    // TODO: build args from env::args()
     let refresh_rate = time::Duration::from_secs_f32(5.0);
 
     begin_tracker_loop(&client, refresh_rate).await;
@@ -57,18 +93,18 @@ async fn main() {
 async fn begin_tracker_loop(client: &reqwest::Client, refresh_rate: time::Duration) {
     loop {
         // TODO: build structs to parse bus/train responses
-        let _buses: Option<Vec<CTABus>> = cta_api_request(&client, BUSTRACKER).await;
-        let _trains: Option<Vec<CTATrain>> = cta_api_request(&client, TRAINTRACKER).await;
+        // let _buses: Option<Vec<CTABus>> = cta_api_request(&client, BUSTRACKER).await;
+        // let _trains: Option<Vec<CTATrain>> = cta_api_request(&client, TRAINTRACKER).await;
         thread::sleep(refresh_rate);
     }
 }
 
 // Make an async request to the CTA transit tracker API of choice.
 // FIXME: properly handle the generic arg.
-async fn cta_api_request<T>(client: &reqwest::Client, api: (&str, &str, &str)) -> Option<Vec<T>> {
-    let (endpoint, path, query) = api;
+async fn cta_api_request<T>(client: &reqwest::Client, api_url: &str ) -> Option<Vec<T>> {
+    let url = Url::parse(api_url).expect("Invalid URL given.");
     let response =
-        client.get(format!("{}{}?{}", endpoint, path, query))
+        client.get(url)
         .send()
         .await
         .unwrap();
@@ -89,4 +125,19 @@ async fn cta_api_request<T>(client: &reqwest::Client, api: (&str, &str, &str)) -
         _ => None,
     }
     // return body;
+}
+
+fn initalize_matrix(config: RGBMatrixConfig) -> (RGBMatrix, Box<Canvas>) {
+    RGBMatrix::new(config, 0).expect("Failed to initialize matrix.")
+}
+
+fn splash_screen(rows: i8, cols: i8) {
+    // let config: RGBMatrixConfig = RGBMatrixConfig::from((
+    //     (hardware_mapping, ()),
+    //     rows: 16,
+    //     cols: 64,
+    //     refresh_rate: 60,
+    //     chain_length: 1,
+    // ));
+    // let (mut matrix, mut canvas) = initalize_matrix(config);
 }
