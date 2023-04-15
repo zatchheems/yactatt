@@ -1,9 +1,17 @@
 use std::{time, thread, collections::HashMap};
 use chrono::NaiveDateTime;
-use clap::{Arg, arg, Command, ArgMatches};
+use clap::{arg, Command};
 use reqwest::{self, StatusCode, Url};
 use rpi_led_panel::{RGBMatrix, RGBMatrixConfig, Canvas};
 use serde::{Serialize, Deserialize};
+use embedded_graphics::{
+    primitives::{Rectangle, Primitive, PrimitiveStyle, Line},
+    text::Text,
+    mono_font::{ascii::FONT_9X15_BOLD, MonoTextStyle},
+    prelude::*,
+    pixelcolor::Rgb888,
+    Drawable
+};
 
 struct URL {
     protocol: String,
@@ -18,44 +26,43 @@ const BUSTRACKER_URL: &str =
 const TRAINTRACKER_URL: &str =
     "http://lapi.transitchicago.com/api/1.0/totarrivals.aspxoutputType=JSON&key=<KEY>&mapid=40380";
 
-// static CTA_COLORS: HashMap<&str, i32> = HashMap::from([
-//     ("red", 0xc60c30),
-//     ("blue", 0x00a1de),
-//     ("brown", 0x62361b),
-//     ("green", 0x009b3a),
-//     ("orange", 0xf9461c),
-//     ("purple", 0x522398),
-//     ("pink", 0xe27ea6),
-//     ("yellow", 0xf9e300),
-//     ("sign_grey", 0x565a5c),
-// ]);
-
 // use reqwest::header::Authorization;
 // use reqwest::header::ContentType;
 #[derive(Serialize, Deserialize, Debug)]
 struct CTABus {
-  heading: i16,
-  vehicle_id: String,
-  // #[serde(with = NaiveDateTime)]
-  timestamp: NaiveDateTime,
-  latitude: f32,
-  longitude: f32,
-  route: String,
-  delayed: bool,
-  destination: String,
-  pattern_distance: i32,
-  pattern_id: i32,
+    // #[serde(with = NaiveDateTime)]
+    destination: String,
+    pattern_distance: i32,
+    pattern_id: i32,
+    delayed: bool,
+    heading: i16,
+    latitude: f32,
+    longitude: f32,
+    route: String,
+    timestamp: NaiveDateTime,
+    vehicle_id: String,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
 struct CTATrain {
-  heading: i16,
-  vehicle_id: String,
-  timestamp: String,
-  latitude: f32,
-  longitude: f32,
-  route: String,
-  delayed: bool
+    delayed: bool,
+    heading: i16,
+    latitude: f32,
+    longitude: f32,
+    route: String,
+    timestamp: NaiveDateTime,
+    vehicle_id: String,
+}
+
+enum CTAVehicle {
+    Bus(CTABus),
+    Train(CTATrain)
+}
+
+impl CTAVehicle {
+    fn draw() {
+        println!("TODO: Draw function on struct CTAVehicle. Takes reference to LED matrix")
+    }
 }
 
 #[tokio::main]
@@ -65,19 +72,21 @@ async fn main() {
         .author("Zak Hammerman <@zatchheems>")
         .about("Yet Another CTA Transit Tracker")
         .args([
-            arg!(-r --rows <i8> "LED matrix rows"),
-            arg!(-c --cols <i8> "LED matrix columns"),
+            arg!(-r --rows <usize> "LED matrix rows").value_parser(clap::value_parser!(usize)),
+            arg!(-c --cols <usize> "LED matrix columns").value_parser(clap::value_parser!(usize)),
+            arg!(-R --refresh_rate <usize> "Refresh rate").value_parser(clap::value_parser!(usize)),
         ])
         .get_matches();
 
 
-    let rows: i8 = *arguments.get_one::<i8>("rows").unwrap_or(&16);
-    let cols: i8 = *arguments.get_one::<i8>("cols").unwrap_or(&64);
+    let rows: usize = *arguments.get_one::<usize>("rows").unwrap_or(&16);
+    let cols: usize = *arguments.get_one::<usize>("cols").unwrap_or(&64);
+    let refresh: usize = *arguments.get_one::<usize>("refresh_rate").unwrap_or(&120);
 
     // Set up LED panel framework
     println!("Starting YACTATT...");
 
-    splash_screen(rows, cols);
+    splash_screen(rows, cols, refresh);
     
     let client = reqwest::Client::new();
     
@@ -101,7 +110,7 @@ async fn begin_tracker_loop(client: &reqwest::Client, refresh_rate: time::Durati
 
 // Make an async request to the CTA transit tracker API of choice.
 // FIXME: properly handle the generic arg.
-async fn cta_api_request<T>(client: &reqwest::Client, api_url: &str ) -> Option<Vec<T>> {
+async fn cta_api_request<CTAVehicle>(client: &reqwest::Client, api_url: &str ) -> Option<Vec<CTAVehicle>> {
     let url = Url::parse(api_url).expect("Invalid URL given.");
     let response =
         client.get(url)
@@ -131,13 +140,76 @@ fn initalize_matrix(config: RGBMatrixConfig) -> (RGBMatrix, Box<Canvas>) {
     RGBMatrix::new(config, 0).expect("Failed to initialize matrix.")
 }
 
-fn splash_screen(rows: i8, cols: i8) {
-    // let config: RGBMatrixConfig = RGBMatrixConfig::from((
-    //     (hardware_mapping, ()),
-    //     rows: 16,
-    //     cols: 64,
-    //     refresh_rate: 60,
-    //     chain_length: 1,
-    // ));
-    // let (mut matrix, mut canvas) = initalize_matrix(config);
+
+fn i32_to_rgb888(color: i32) -> Rgb888 {
+    // Split out color components from hex codes
+    let r: u8 = ((color & 0xff0000) >> 16) as u8;
+    let g: u8 = ((color & 0x00ff00) >> 8) as u8;
+    let b: u8 = (color & 0x0000ff) as u8;
+    Rgb888::new(r, g, b)
+
+}
+
+fn splash_screen(rows: usize, cols: usize, refresh_rate: usize) {
+    let cta_train_colors: HashMap<&str, i32> = HashMap::from([
+        ("red", 0xc60c30),
+        ("blue", 0x00a1de),
+        ("brown", 0x62361b),
+        ("green", 0x009b3a),
+        ("orange", 0xf9461c),
+        ("purple", 0x522398),
+        ("pink", 0xe27ea6),
+        ("yellow", 0xf9e300),
+    ]);
+    let cta_sign_grey: i32 = 0x565a5c;
+
+    // TODO: add command-line args for all required struct fields
+    let config: RGBMatrixConfig = RGBMatrixConfig{
+        chain_length: 1,
+        dither_bits: 0,
+        hardware_mapping: rpi_led_panel::HardwareMapping::adafruit_hat_pwm(),
+        interlaced: false,
+        rows,
+        cols,
+        led_sequence: rpi_led_panel::LedSequence::Rbg,
+        row_setter: rpi_led_panel::RowAddressSetterType::Direct,
+        pwm_lsb_nanoseconds: 300,
+        refresh_rate,
+        ..RGBMatrixConfig::default()
+    };
+    let (mut matrix, mut canvas) = initalize_matrix(config);
+    let mut offset: i32 = 0;
+    // Draw splash screen
+    for _step in 0.. {
+        for (name, color) in &cta_train_colors {
+            let top_left: Point = Point::new(
+                (offset % 4) * (cols as i32 / 4),
+                if offset > 4 {rows as i32 / 2} else {0}
+            );
+
+// FIXME: you want sauce with that spaghetti?
+            let rectangle =
+            Rectangle::new(
+                top_left,
+                    Size::new(cols as u32 / 4, rows as u32 / 2)
+                )
+                .into_styled(PrimitiveStyle::with_fill(i32_to_rgb888(*color)));
+            rectangle.draw(canvas.as_mut()).unwrap();
+            { offset += 1; offset };
+        }
+        let start: Point = Point::new(0, rows as i32 / 2); 
+        let end: Point = Point::new(cols as i32, rows as i32 / 2); 
+        let text_start: Point = Point::new(1, (rows as i32 / 2) + 4); 
+        Line::new(start, end)
+            .into_styled(PrimitiveStyle::with_stroke(Rgb888::new(0,0,0), 12))
+            .draw(canvas.as_mut()).unwrap();
+        Text::new("YACTATT", text_start, MonoTextStyle::new(&FONT_9X15_BOLD, i32_to_rgb888(cta_sign_grey)))
+            .draw(canvas.as_mut()).unwrap();
+        
+        // TODO: print version number and my handle
+
+        canvas = matrix.update_on_vsync(canvas);
+        // thread::sleep(std::time::Duration::from_secs_f32(5.0));
+        offset = 0;
+    }
 }
