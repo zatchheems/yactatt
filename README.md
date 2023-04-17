@@ -1,5 +1,10 @@
 # Yactatt — Yet Another (Unofficial!) CTA Transit Tracker
 
+![alt-text](https://user-images.githubusercontent.com/8506829/232356892-81f47b17-7f56-47c8-bfd1-25f0210cbefc.jpg "An early splash screen displaying CTA colors and the text \"YACTATT\" on a 64x32 LED matrix.")
+_For display on an LED array; early prototype optimized for 64x32 displays._
+
+---
+
 Basic Rust project making use of [Chicago Transit Authority data](https://www.transitchicago.com/developers/)
 to display bus and train times on an LED matrix.
 
