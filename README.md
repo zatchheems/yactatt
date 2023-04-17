@@ -18,21 +18,23 @@ Remember to be kind to your drivers and conductors: they deserve better benefits
   - Delayed?
   - Run ID (optional)
   - Cool animations (optional)
+- [x] Basic splash screen
+  - [ ] Cool upgrades showing my handle, system version, package version
 - [ ] Runtime args for the following:
-  - LED matrix rows
-  - LED matrix columns
-  - Bus routes
-  - Train routes
-  - Bus stops
-  - Train stations
-  - Refresh rate
+  - [x] LED matrix rows
+  - [x] LED matrix columns
+  - [ ] Bus routes and stops
+  - [ ] Train routes and stations
+  - [x] Refresh rate
+  - [x] "Silent" mode to work without LED panel
 - [ ] Config file in TOML, supplementing/overridden by the above
+- [ ] Tests
 
 ## Background
 
 I'm an Elixir/ReScript developer by day and I don't really know Rust!
 
-This started out as a way to leverage Nerves to try to get down to the hardware level bit as time
+This started out as a way to leverage Nerves to try to get down to the hardware level but as time
 goes by I am skeptical of doing _that_ much work when perfectly good LED panel libraries exist and
 support languages such as Rust, which is one I've been itching to learn for a while.
 
