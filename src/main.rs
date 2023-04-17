@@ -35,6 +35,8 @@ enum Prediction {
     D
 }
 
+// TODO: use #[serde(flatten)] to remove needless nested keys
+
 #[derive(Deserialize, Debug)]
 struct CTABus {
     tmstmp: String, // "YYYYMMDD HH24:MI"
@@ -56,16 +58,24 @@ struct CTABus {
     zone: String // Empty string if vehicle has not entered a defined zone
 }
 
+impl CTABus {
+    fn draw(&self, mut matrix: RGBMatrix, mut canvas: Box<Canvas>){
+        
+    }
+}
+
 #[derive(Deserialize, Debug)]
-struct CTABusTimes {
+struct CTABusTimesResponse {
     #[serde(rename(deserialize = "bustime-response"))]
     bustime_response: CTABusTimesPredictions
 }
 
 #[derive(Deserialize, Debug)]
 struct CTABusTimesPredictions {
-    prd: Vec<CTABus>
+    prd: CTABusTimes
 }
+
+type CTABusTimes = Vec<CTABus>;
 
 #[derive(Deserialize, Debug)]
 struct CTATrain {
@@ -110,12 +120,14 @@ async fn main() {
     let cols: usize = *arguments.get_one::<usize>("cols").unwrap_or(&64);
     let refresh: usize = *arguments.get_one::<usize>("refresh_rate").unwrap_or(&120);
     let silent: bool = *arguments.get_one::<bool>("silent").unwrap_or(&false);
+    let (mut matrix, mut canvas);
 
     // Set up LED panel framework
     println!("Starting YACTATT...");
 
     if !silent {
-        splash_screen(rows, cols, refresh);
+        (matrix, canvas) = initialize_matrix(rows, cols, refresh);
+        splash_screen(rows, cols, refresh, matrix, canvas);
     }
     
     let client = reqwest::Client::new();
@@ -123,25 +135,25 @@ async fn main() {
     // TODO: build args from env::args()
     let refresh_rate = time::Duration::from_secs_f32(60.0);
 
-    // begin_tracker_loop(&client, refresh_rate).await;
-    cta_api_request(&client, BUSTRACKER_URL).await;
+    begin_tracker_loop(&client, refresh_rate).await;
 
     println!("Exiting... hope you caught a ride!");
 }
 
 // Main loop. Handles refreshing LED panel and fetching & parsing tracking data.
 async fn begin_tracker_loop(client: &reqwest::Client, refresh_rate: time::Duration) -> () {
-    // loop {
-        // TODO: build structs to parse bus/train responses
-        // let _buses: Option<Vec<CTABus>> = cta_api_request(&client, BUSTRACKER).await;
-        // let _trains: Option<Vec<CTATrain>> = cta_api_request(&client, TRAINTRACKER).await;
-        // thread::sleep(refresh_rate);
-    // }
+    loop {
+        match cta_api_request(&client, BUSTRACKER_URL).await {
+            Some(buses) => println!("{:?}", buses),
+            None => println!("Missing bus response..."),
+        }
+        thread::sleep(refresh_rate);
+    }
 }
 
 // Make an async request to the CTA transit tracker API of choice.
 // FIXME: properly handle the generic arg.
-async fn cta_api_request(client: &reqwest::Client, api_url: &str ) -> () {//Option<Vec<CTAVehicle>> {
+async fn cta_api_request(client: &reqwest::Client, api_url: &str ) -> Option<CTABusTimes> {
     let url = Url::parse(api_url).expect("Invalid URL given.");
     let response =
         client.get(url)
@@ -154,48 +166,20 @@ async fn cta_api_request(client: &reqwest::Client, api_url: &str ) -> () {//Opti
     match response.status() {
         StatusCode::OK => {
             // println!("{:?}", response.text().await);
-            println!("{:?}", response.json::<CTABusTimes>().await);
-            // None
+            let bustimes = response.json::<CTABusTimesResponse>().await.unwrap();
+            Some(bustimes.bustime_response.prd)
         },//response.json::<Vec<CTATrain>>,//Some(vec![result]),
         // Err(reqwest::StatusCode::NOT_FOUND) => println!("404 Not found"),
-        // Err(reqwest::StatusCode::BAD_REQUEST) => println!("400 Bad request"),
         // Err(reqwest::StatusCode::BAD_GATEWAY) => println!("502 Bad gateway"),
-        StatusCode::BAD_REQUEST => (),// None,
-        StatusCode::UNAUTHORIZED => (),//None,
-        _ => (),//None,
+        StatusCode::BAD_REQUEST => None,
+        StatusCode::UNAUTHORIZED => None,
+        _ => None,//None,
     }
     // return body;
 }
 
-fn initialize_matrix(config: RGBMatrixConfig) -> (RGBMatrix, Box<Canvas>) {
-    RGBMatrix::new(config, 0).expect("Failed to initialize matrix.")
-}
-
-
-fn i32_to_rgb888(color: i32) -> Rgb888 {
-    // Split out color components from hex codes
-    let r: u8 = ((color & 0xff0000) >> 16) as u8;
-    let g: u8 = ((color & 0x00ff00) >> 8) as u8;
-    let b: u8 = (color & 0x0000ff) as u8;
-    Rgb888::new(r, g, b)
-
-}
-
-fn splash_screen(rows: usize, cols: usize, refresh_rate: usize) {
-    // TODO: static, constant CTA colors
-    let cta_train_colors: BTreeMap<&str, i32> = BTreeMap::from([
-        ("red", 0xc60c30),
-        ("blue", 0x00a1de),
-        ("brown", 0x62361b),
-        ("green", 0x009b3a),
-        ("orange", 0xf9461c),
-        ("purple", 0x522398),
-        ("pink", 0xe27ea6),
-        ("yellow", 0xf9e300),
-    ]);
-    let cta_sign_grey: i32 = 0x565a5c;
-
-    // TODO: add command-line args for all required struct fields
+fn initialize_matrix(rows: usize, cols: usize, refresh_rate: usize) -> (RGBMatrix, Box<Canvas>) {
+// TODO: add command-line args for all required struct fields
     let config: RGBMatrixConfig = RGBMatrixConfig{
         chain_length: 1,
         dither_bits: 0,
@@ -209,7 +193,32 @@ fn splash_screen(rows: usize, cols: usize, refresh_rate: usize) {
         refresh_rate,
         ..RGBMatrixConfig::default()
     };
-    let (mut matrix, mut canvas) = initialize_matrix(config);
+    RGBMatrix::new(config, 0).expect("Failed to initialize matrix.")
+}
+
+
+fn i32_to_rgb888(color: i32) -> Rgb888 {
+    // Split out color components from hex codes
+    let r: u8 = ((color & 0xff0000) >> 16) as u8;
+    let g: u8 = ((color & 0x00ff00) >> 8) as u8;
+    let b: u8 = (color & 0x0000ff) as u8;
+    Rgb888::new(r, g, b)
+
+}
+
+fn splash_screen(rows: usize, cols: usize, refresh_rate: usize, mut matrix: RGBMatrix, mut canvas: Box<Canvas>) {
+    // TODO: static, constant CTA colors
+    let cta_train_colors: BTreeMap<&str, i32> = BTreeMap::from([
+        ("red", 0xc60c30),
+        ("blue", 0x00a1de),
+        ("brown", 0x62361b),
+        ("green", 0x009b3a),
+        ("orange", 0xf9461c),
+        ("purple", 0x522398),
+        ("pink", 0xe27ea6),
+        ("yellow", 0xf9e300),
+    ]);
+    let cta_sign_grey: i32 = 0x565a5c;
     let mut offset: i32 = 0;
     // Draw splash screen
     for _step in 0.. {
