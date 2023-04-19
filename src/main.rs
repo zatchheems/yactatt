@@ -189,13 +189,13 @@ async fn begin_tracker_loop(
                             .clone()
                             .into_iter()
                             .for_each(|bus| {
-                                    CTAVehicle::draw(&CTAVehicle::Bus(bus), &mut canvas, 1, offset);
+                                    CTAVehicle::draw(&CTAVehicle::Bus(bus), &mut canvas, 2, offset);
                                     offset += VERTICAL_OFFSET;
                                 });
                         canvas = matrix.update_on_vsync(canvas);
 
                         if now.elapsed().unwrap() > timeout {
-                            canvas.clear(Rgb888::new(0,0,0));
+                            canvas.clear(Rgb888::CSS_BLACK).unwrap();
                             break;
                         }
                     }
